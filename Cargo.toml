@@ -2,6 +2,7 @@
 name = "ceph-rbd"
 version = "0.1.0"
 authors = ["Chris Holcombe <xfactor973@gmail.com>"]
+license = "MIT"
 
 [build-dependencies]
 bindgen = "0.26.3"
