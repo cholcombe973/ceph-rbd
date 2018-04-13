@@ -1,0 +1,13 @@
+[package]
+name = "ceph-rbd"
+version = "0.1.0"
+authors = ["Chris Holcombe <xfactor973@gmail.com>"]
+
+[build-dependencies]
+bindgen = "0.26.3"
+
+[dependencies]
+ceph = "*"
+libc = "~0.2"
+log = "~0.4"
+nix = "~0.10"
