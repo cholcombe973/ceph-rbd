@@ -232,7 +232,7 @@ impl Rbd {
     }
     ///Get pool mirror mode.
     pub fn mirror_mode_get(self, ioctx: rados_ioctx_t) -> RadosResult<rbd_mirror_mode_t> {
-        let mut mode = rbd_mirror_mode_t::RBD_MIRROR_MODE_DISABLED;
+        let mut mode = rbd_mirror_mode_t_RBD_MIRROR_MODE_DISABLED;
         unsafe {
             let ret_code = rbd_mirror_mode_get(ioctx, &mut mode);
             if ret_code < 0 {
@@ -1310,7 +1310,7 @@ pub fn set_image_notification(){
  */
 
     pub fn get_lock_owners(&self) -> RadosResult<()> {
-        let mut lock_mode = rbd_lock_mode_t::RBD_LOCK_MODE_SHARED;
+        let mut lock_mode = rbd_lock_mode_t_RBD_LOCK_MODE_SHARED;
         let mut max_owners: usize = 8;
 
         let mut owners = vec![ptr::null_mut::<::std::os::raw::c_char>(); max_owners];
