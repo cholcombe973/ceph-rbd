@@ -411,7 +411,7 @@ impl Rbd {
                 let retcode = rbd_list(ioctx, name_buff.as_mut_ptr(), &mut name_size);
                 if retcode == -(nix::errno::Errno::ERANGE as i32) {
                     // provided byte array is smaller than listing size
-                    //debug!("Resizing to {}", name_size + 1);
+                    debug!("Resizing to {}", name_size + 1);
                     name_buff = Vec::with_capacity(name_size + 1);
                     continue;
                 }
@@ -429,6 +429,7 @@ impl Rbd {
                 }
             }
         }
+        debug!("rbd list finished");
 
         /*
          * returned byte array contains image names separated by '\0'.
@@ -437,6 +438,7 @@ impl Rbd {
         let mut name_list: Vec<String> = Vec::new();
         let new_buff: Vec<u8> = name_buff.iter().map(|c| c.clone() as u8).collect();
         let mut cursor = Cursor::new(&new_buff);
+        debug!("parsing ceph rbd list");
         loop {
             let mut string_buf: Vec<u8> = Vec::new();
             let read = try!(cursor.read_until(0x00, &mut string_buf));
@@ -454,6 +456,7 @@ impl Rbd {
                 }
             }
         }
+        debug!("done parsing ceph rbd list");
 
         return Ok(name_list);
     }
