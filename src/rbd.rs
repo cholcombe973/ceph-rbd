@@ -439,7 +439,7 @@ impl Rbd {
         let mut cursor = Cursor::new(&new_buff);
         loop {
             let mut string_buf: Vec<u8> = Vec::new();
-            let read = try!(cursor.read_until(0x00, &mut string_buf));
+            let read = cursor.read_until(0x00, &mut string_buf)?;
             if read == 0 {
                 // End of name_buff;
                 break;
