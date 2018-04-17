@@ -48,7 +48,7 @@ pub struct RbdImageInfo {
     pub order: ::std::os::raw::c_int,
     pub block_name_prefix: String,
     pub parent_pool: i64,
-    pub parent_name: String,
+    pub parent_name: Option<String>,
 }
 
 impl Rbd {
@@ -685,7 +685,13 @@ pub fn resize2(){
             .map(|c| c.clone() as u8)
             .filter(|c| c > &0)
             .collect();
-        let parent_name = String::from_utf8(parent_name_vec)?;
+        let parent_name = {
+            let s = String::from_utf8(parent_name_vec)?;
+            match s.is_empty() {
+                true => None,
+                false => Some(s),
+            }
+        };
 
         Ok(RbdImageInfo {
             size: info.size,
