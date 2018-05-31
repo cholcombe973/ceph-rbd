@@ -5,8 +5,8 @@ extern crate log;
 extern crate nix;
 
 use self::ceph::error::{RadosError, RadosResult};
-use get_error;
 use ffi::*;
+use get_error;
 
 use std::collections::HashMap;
 use std::ffi::CString;
@@ -577,33 +577,32 @@ pub fn aio_open_by_id(){
                                     rbd_completion_t c);
                                     }
  }                                    
-
-/**
-///Open an image in read-only mode.
- *
-///This is intended for use by clients that cannot write to a block
-///device due to cephx restrictions. There will be no watch
-///established on the header object, since a watch is a write. This
-///means the metadata reported about this image (parents, snapshots,
-///size, etc.) may become stale. This should not be used for
-///long-running operations, unless you can be sure that one of these
-///properties changing is safe.
- *
-///Attempting to write to a read-only image will return -EROFS.
- *
-///@param io ioctx to determine the pool the image is in
-///@param name image name
-///@param image where to store newly opened image handle
-///@param snap_name name of snapshot to open at, or NULL for no snapshot
-///@returns 0 on success, negative error code on failure
  */
-pub fn open_read_only(){
- unsafe{
- rbd_open_read_only(rados_ioctx_t io, const char *name,
-                                    rbd_image_t *image, const char *snap_name);
-                                    }
- }                                    
+    /// This is intended for use by clients that cannot write to a block
+    /// device due to cephx restrictions. There will be no watch
+    /// established on the header object, since a watch is a write. This
+    /// means the metadata reported about this image (parents, snapshots,
+    /// size, etc.) may become stale. This should not be used for
+    /// long-running operations, unless you can be sure that one of these
+    /// properties changing is safe.
+    /// Attempting to write to a read-only image will return -EROFS.
+    /// Open an image in read-only mode.
+    /// ioctx can be acquired using the ceph-rust crate
+    pub fn open_read_only(ioctx: rados_ioctx_t, name: &str, snap_name: &str) -> RadosResult<Self> {
+        let name = CString::new(name)?;
+        let snap_name = CString::new(snap_name)?;
+        let mut rbd: rbd_image_t = ptr::null_mut();
 
+        unsafe {
+            let ret_code = rbd_open_read_only(ioctx, name.as_ptr(), &mut rbd, snap_name.as_ptr());
+            if ret_code < 0 {
+                return Err(RadosError::new(get_error(ret_code)?));
+            }
+        }
+        Ok(RbdImage { image: rbd })
+    }
+
+    /**
 pub fn open_by_id_read_only(){
                                     unsafe{
  rbd_open_by_id_read_only(rados_ioctx_t io, const char *id,
@@ -647,7 +646,7 @@ pub fn resize2(){
                  }
  }                 
  */
-    ///Change the size of the image.
+///Change the size of the image.
     pub fn resize(&self, size: u64) -> RadosResult<()> {
         unsafe {
             let ret_code = rbd_resize(self.image, size);
