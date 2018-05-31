@@ -1,14 +1,20 @@
 [package]
-name = "ceph-rbd"
-version = "0.2.0"
 authors = ["Chris Holcombe <xfactor973@gmail.com>"]
+categories = ["api-bindings"]
+description = "Ceph Rados Block Device Bindings"
+documentation = "https://docs.rs/ceph-rbd"
+homepage = "https://github.com/cholcombe973/ceph-rbd"
+keywords = ["ceph"]
 license = "MIT"
+name = "ceph-rbd"
+repository = "https://github.com/cholcombe973/ceph-rbd"
+version = "0.2.0"
 
 [build-dependencies]
 bindgen = "0.36.0"
 
 [dependencies]
-ceph = "*"
+ceph = "~0.4"
 libc = "~0.2"
 log = "~0.4"
 nix = "~0.10"
