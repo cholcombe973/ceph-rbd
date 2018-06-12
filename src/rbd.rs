@@ -13,6 +13,7 @@ use std::ffi::CString;
 use std::io::{BufRead, Cursor};
 use std::mem::size_of;
 use std::ops::Drop;
+use std::os::raw::{c_char, c_void};
 use std::ptr;
 
 pub struct Rbd;
@@ -1585,14 +1586,25 @@ pub fn list_lockers(){
 			              char *addrs, size_t *addrs_len);
                            }
 }
+*/
 
-/* I/O */
-pub fn read(){
- unsafe{
- ssize_t rbd_read(rbd_image_t image, uint64_t ofs, size_t len,
-                              char *buf);
-                               }
-}
+    /* I/O */
+    /// If the given buffer is too small this will reserve additional capacity from it
+    pub fn read(&self, buffer: &mut Vec<i8>, offset: u64, length: usize) -> RadosResult<isize> {
+        let buf_size = buffer.capacity();
+        if length > buf_size {
+            buffer.reserve(length - buf_size);
+        }
+        unsafe {
+            let size_read = rbd_read(self.image, offset, length, buffer.as_mut_ptr());
+            if size_read < 0 {
+                return Err(RadosError::new(get_error(size_read as i32)?));
+            }
+            buffer.set_len(size_read as usize);
+            Ok(size_read)
+        }
+    }
+    /*
 
 ///@param op_flags: see librados.h constants beginning with LIBRADOS_OP_FLAG
 pub fn read(){
@@ -1601,24 +1613,35 @@ pub fn read(){
                                char *buf, int op_flags);
                                 }
 }
+*/
 
-///iterate read over an image
-///Reads each region of the image and calls the callback.  If the
-///buffer pointer passed to the callback is NULL, the given extent is
-///defined to be zeros (a hole).  Normally the granularity for the
-///callback is the image stripe size.
-///@param image image to read
-///@param ofs offset to start from
-///@param len bytes of source image to cover
-///@param cb callback for each region
-///@returns 0 success, error otherwise
- pub fn read_iterate2(){
- unsafe{
-    rbd_read_iterate2(rbd_image_t image, uint64_t ofs, uint64_t len,
-                            int (*cb)(uint64_t, size_t, const char *, void *),
-                                    void *arg);
-                                    }
- }
+    ///Iterate read over an image
+    ///Reads each region of the image and calls the callback.  If the
+    ///buffer pointer passed to the callback is NULL, the given extent is
+    ///defined to be zeros (a hole).  Normally the granularity for the
+    ///callback is the image stripe size.
+    ///@param image image to read
+    ///@param ofs offset to start from
+    ///@param len bytes of source image to cover
+    ///@param cb callback for each region
+    ///@returns 0 success, error otherwise
+    pub fn read_iterate2(
+        &self,
+        offset: u64,
+        length: u64,
+        callback: Option<unsafe extern "C" fn(u64, usize, *const c_char, *mut c_void) -> i32>,
+    ) -> RadosResult<()> {
+        let p: *mut c_void = ptr::null_mut();
+        unsafe {
+            let ret_code = rbd_read_iterate2(self.image, offset, length, callback, p);
+            if ret_code < 0 {
+                return Err(RadosError::new(get_error(ret_code)?));
+            }
+        }
+        Ok(())
+    }
+
+    /*
 ///get difference between two versions of an image
 ///This will return the differences between two versions of an image
 ///via a callback, which gets the offset and length and a flag
