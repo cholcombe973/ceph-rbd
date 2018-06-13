@@ -20,9 +20,10 @@ pub struct Rbd;
 
 #[derive(Debug)]
 pub struct RbdImage {
-    image: rbd_image_t,
+    pub image: rbd_image_t,
 }
 
+/*
 impl Drop for RbdImage {
     fn drop(&mut self) {
         if !self.image.is_null() {
@@ -35,6 +36,7 @@ impl Drop for RbdImage {
         }
     }
 }
+*/
 
 pub struct LockOwner {
     pub name: String,
