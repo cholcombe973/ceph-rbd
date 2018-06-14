@@ -12,7 +12,6 @@ use std::collections::HashMap;
 use std::ffi::CString;
 use std::io::{BufRead, Cursor};
 use std::mem::size_of;
-use std::ops::Drop;
 use std::os::raw::{c_char, c_void};
 use std::ptr;
 
@@ -22,21 +21,6 @@ pub struct Rbd;
 pub struct RbdImage {
     pub image: rbd_image_t,
 }
-
-/*
-impl Drop for RbdImage {
-    fn drop(&mut self) {
-        if !self.image.is_null() {
-            unsafe {
-                let retcode = rbd_close(self.image);
-                if retcode < 0 {
-                    error!("RbdImage Drop failed");
-                }
-            }
-        }
-    }
-}
-*/
 
 pub struct LockOwner {
     pub name: String,
@@ -556,6 +540,19 @@ impl RbdImage {
             }
         }
         Ok(RbdImage { image: rbd })
+    }
+
+   /// @desc: closes an rbd image. 
+   /// Should be called on an RBDImage after a successful open
+    pub fn close_image(&self) {
+        if !self.image.is_null() {
+            unsafe {
+                let retcode = rbd_close(self.image);
+                if retcode != 0 {
+                    error!("RbdImage close failed with code {}", retcode);
+                }
+            }
+        }
     }
 
     /*
