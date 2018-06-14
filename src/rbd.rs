@@ -19,7 +19,7 @@ pub struct Rbd;
 
 #[derive(Debug)]
 pub struct RbdImage {
-    pub image: rbd_image_t,
+    image: rbd_image_t,
 }
 
 pub struct LockOwner {
@@ -544,7 +544,7 @@ impl RbdImage {
 
    /// @desc: closes an rbd image. 
    /// Should be called on an RBDImage after a successful open
-    pub fn close_image(&self) {
+    pub fn close_image(&self) -> RadosResult<()> {
         if !self.image.is_null() {
             unsafe {
                 let retcode = rbd_close(self.image);
@@ -553,6 +553,7 @@ impl RbdImage {
                 }
             }
         }
+        Ok(())
     }
 
     /*

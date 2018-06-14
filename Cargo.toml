@@ -18,6 +18,4 @@ ceph = "~0.4"
 libc = "~0.2"
 log = "~0.4"
 nix = "~0.10"
-
-[dev-dependencies]
 rayon = "~1.0"
