@@ -11,6 +11,7 @@ use get_error;
 use std::collections::HashMap;
 use std::ffi::CString;
 use std::io::{BufRead, Cursor};
+use std::marker::PhantomData;
 use std::mem::size_of;
 use std::ops::Drop;
 use std::os::raw::{c_char, c_void};
@@ -19,11 +20,12 @@ use std::ptr;
 pub struct Rbd;
 
 #[derive(Debug)]
-pub struct RbdImage {
+pub struct RbdImage<'a> {
     image: rbd_image_t,
+    phantom: PhantomData<&'a rados_ioctx_t>,
 }
 
-impl Drop for RbdImage {
+impl<'a> Drop for RbdImage<'a> {
     fn drop(&mut self) {
         if !self.image.is_null() {
             unsafe {
@@ -540,7 +542,7 @@ pub fn remove_with_progress(){
  */
 }
 
-impl RbdImage {
+impl<'a> RbdImage<'a> {
     /// ioctx can be acquired using the ceph-rust crate
     pub fn open(ioctx: rados_ioctx_t, name: &str, snap_name: &str) -> RadosResult<Self> {
         let name = CString::new(name)?;
@@ -553,7 +555,10 @@ impl RbdImage {
                 return Err(RadosError::new(get_error(ret_code)?));
             }
         }
-        Ok(RbdImage { image: rbd })
+        Ok(RbdImage {
+            image: rbd,
+            phantom: PhantomData,
+        })
     }
 
     /*
@@ -600,7 +605,10 @@ pub fn aio_open_by_id(){
                 return Err(RadosError::new(get_error(ret_code)?));
             }
         }
-        Ok(RbdImage { image: rbd })
+        Ok(RbdImage {
+            image: rbd,
+            phantom: PhantomData,
+        })
     }
 
     /**
