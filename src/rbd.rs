@@ -122,7 +122,7 @@ impl Rbd {
             if ret_code < 0 {
                 return Err(RadosError::new(get_error(ret_code)?));
             }
-            let ret_code = rbd_create4(ioctx.ioctx, name.as_ptr(), size, opts);
+            let ret_code = rbd_create4(*ioctx.inner(), name.as_ptr(), size, opts);
             if ret_code < 0 {
                 return Err(RadosError::new(get_error(ret_code)?));
             }
@@ -191,10 +191,10 @@ impl Rbd {
                 return Err(RadosError::new(get_error(ret_code)?));
             }
             let ret_code = rbd_clone3(
-                parent_ioctx.ioctx,
+                *parent_ioctx.inner(),
                 parent_name.as_ptr(),
                 parent_snapname.as_ptr(),
-                ioctx.ioctx,
+                *ioctx.inner(),
                 name.as_ptr(),
                 opts,
             );
@@ -216,7 +216,7 @@ impl Rbd {
     pub fn remove(&self, ioctx: &IoCtx, name: &str) -> RadosResult<()> {
         let name = CString::new(name)?;
         unsafe {
-            let ret_code = rbd_remove(ioctx.ioctx, name.as_ptr());
+            let ret_code = rbd_remove(*ioctx.inner(), name.as_ptr());
             if ret_code < 0 {
                 return Err(RadosError::new(get_error(ret_code)?));
             }
@@ -229,7 +229,7 @@ impl Rbd {
         let src = CString::new(src)?;
         let dst = CString::new(dst)?;
         unsafe {
-            let ret_code = rbd_rename(ioctx.ioctx, src.as_ptr(), dst.as_ptr());
+            let ret_code = rbd_rename(*ioctx.inner(), src.as_ptr(), dst.as_ptr());
             if ret_code < 0 {
                 return Err(RadosError::new(get_error(ret_code)?));
             }
@@ -240,7 +240,7 @@ impl Rbd {
     pub fn mirror_mode_get(self, ioctx: &IoCtx) -> RadosResult<rbd_mirror_mode_t> {
         let mut mode = rbd_mirror_mode_t_RBD_MIRROR_MODE_DISABLED;
         unsafe {
-            let ret_code = rbd_mirror_mode_get(ioctx.ioctx, &mut mode);
+            let ret_code = rbd_mirror_mode_get(*ioctx.inner(), &mut mode);
             if ret_code < 0 {
                 return Err(RadosError::new(get_error(ret_code)?));
             }
@@ -252,7 +252,7 @@ impl Rbd {
     ///Set pool mirror mode.
     pub fn mirror_mode_set(self, ioctx: &IoCtx, mirror_mode: rbd_mirror_mode_t) -> RadosResult<()> {
         unsafe {
-            let ret_code = rbd_mirror_mode_set(ioctx.ioctx, mirror_mode);
+            let ret_code = rbd_mirror_mode_set(*ioctx.inner(), mirror_mode);
             if ret_code < 0 {
                 return Err(RadosError::new(get_error(ret_code)?));
             }
@@ -273,7 +273,7 @@ impl Rbd {
         let mut uuid: Vec<i8> = Vec::with_capacity(512);
         unsafe {
             let ret_code = rbd_mirror_peer_add(
-                ioctx.ioctx,
+                *ioctx.inner(),
                 uuid.as_mut_ptr(),
                 uuid.capacity(),
                 cluster_name.as_ptr(),
@@ -291,7 +291,7 @@ impl Rbd {
     pub fn mirror_peer_remove(self, ioctx: &IoCtx, uuid: &str) -> RadosResult<()> {
         let uuid = CString::new(uuid)?;
         unsafe {
-            let ret_code = rbd_mirror_peer_remove(ioctx.ioctx, uuid.as_ptr());
+            let ret_code = rbd_mirror_peer_remove(*ioctx.inner(), uuid.as_ptr());
             if ret_code < 0 {
                 return Err(RadosError::new(get_error(ret_code)?));
             }
@@ -310,7 +310,7 @@ impl Rbd {
         let client_name = CString::new(client_name)?;
         unsafe {
             let ret_code =
-                rbd_mirror_peer_set_client(ioctx.ioctx, uuid.as_ptr(), client_name.as_ptr());
+                rbd_mirror_peer_set_client(*ioctx.inner(), uuid.as_ptr(), client_name.as_ptr());
             if ret_code < 0 {
                 return Err(RadosError::new(get_error(ret_code)?));
             }
@@ -329,7 +329,7 @@ impl Rbd {
         let cluster_name = CString::new(cluster_name)?;
         unsafe {
             let ret_code =
-                rbd_mirror_peer_set_cluster(ioctx.ioctx, uuid.as_ptr(), cluster_name.as_ptr());
+                rbd_mirror_peer_set_cluster(*ioctx.inner(), uuid.as_ptr(), cluster_name.as_ptr());
             if ret_code < 0 {
                 return Err(RadosError::new(get_error(ret_code)?));
             }
@@ -412,7 +412,7 @@ impl Rbd {
         let mut name_size: usize = name_buff.capacity();
         loop {
             unsafe {
-                let retcode = rbd_list(ioctx.ioctx, name_buff.as_mut_ptr(), &mut name_size);
+                let retcode = rbd_list(*ioctx.inner(), name_buff.as_mut_ptr(), &mut name_size);
                 if retcode == -(nix::errno::Errno::ERANGE as i32) {
                     // provided byte array is smaller than listing size
                     trace!("Resizing to {}", name_size + 1);
@@ -551,7 +551,7 @@ impl<'a> RbdImage<'a> {
         let mut rbd: rbd_image_t = ptr::null_mut();
 
         unsafe {
-            let ret_code = rbd_open(ioctx.ioctx, name.as_ptr(), &mut rbd, snap_name.as_ptr());
+            let ret_code = rbd_open(*ioctx.inner(), name.as_ptr(), &mut rbd, snap_name.as_ptr());
             if ret_code < 0 {
                 return Err(RadosError::new(get_error(ret_code)?));
             }
@@ -602,7 +602,7 @@ pub fn aio_open_by_id(){
 
         unsafe {
             let ret_code =
-                rbd_open_read_only(ioctx.ioctx, name.as_ptr(), &mut rbd, snap_name.as_ptr());
+                rbd_open_read_only(*ioctx.inner(), name.as_ptr(), &mut rbd, snap_name.as_ptr());
             if ret_code < 0 {
                 return Err(RadosError::new(get_error(ret_code)?));
             }
@@ -890,7 +890,7 @@ pub fn resize2(){
             if ret_code < 0 {
                 return Err(RadosError::new(get_error(ret_code)?));
             }
-            let ret_code = rbd_copy3(self.image, dest_ioctx.ioctx, dest_name.as_ptr(), opts);
+            let ret_code = rbd_copy3(self.image, *dest_ioctx.inner(), dest_name.as_ptr(), opts);
             if ret_code < 0 {
                 return Err(RadosError::new(get_error(ret_code)?));
             }
