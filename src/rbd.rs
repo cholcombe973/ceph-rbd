@@ -56,7 +56,7 @@ pub struct RbdImageInfo {
     pub parent_pool: i64,
     pub parent_name: Option<String>,
 }
-
+ 
 impl Rbd {
     /// Create an rbd image
     /// name: what the image is called
