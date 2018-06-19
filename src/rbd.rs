@@ -4,13 +4,16 @@ extern crate ceph;
 extern crate log;
 extern crate nix;
 
+use self::ceph::ceph::IoCtx;
 use self::ceph::error::{RadosError, RadosResult};
+
 use ffi::*;
 use get_error;
 
 use std::collections::HashMap;
 use std::ffi::CString;
 use std::io::{BufRead, Cursor};
+use std::marker::PhantomData;
 use std::mem::size_of;
 use std::os::raw::{c_char, c_void};
 use std::ptr;
@@ -18,8 +21,22 @@ use std::ptr;
 pub struct Rbd;
 
 #[derive(Debug)]
-pub struct RbdImage {
+pub struct RbdImage<'a> {
     image: rbd_image_t,
+    phantom: PhantomData<&'a IoCtx>,
+}
+
+impl<'a> Drop for RbdImage<'a> {
+    fn drop(&mut self) {
+        if !self.image.is_null() {
+            unsafe {
+                let retcode = rbd_close(self.image);
+                if retcode < 0 {
+                    error!("RbdImage Drop failed");
+                }
+            }
+        }
+    }
 }
 
 pub struct LockOwner {
@@ -37,7 +54,7 @@ pub struct RbdImageInfo {
     pub parent_pool: i64,
     pub parent_name: Option<String>,
 }
-
+ 
 impl Rbd {
     /// Create an rbd image
     /// name: what the image is called
@@ -52,7 +69,7 @@ impl Rbd {
     /// data_pool: optional separate pool for data blocks
     pub fn create(
         &self,
-        ioctx: rados_ioctx_t,
+        ioctx: &IoCtx,
         name: &str,
         size: u64,
         order: Option<u64>,
@@ -103,7 +120,7 @@ impl Rbd {
             if ret_code < 0 {
                 return Err(RadosError::new(get_error(ret_code)?));
             }
-            let ret_code = rbd_create4(ioctx, name.as_ptr(), size, opts);
+            let ret_code = rbd_create4(*ioctx.inner(), name.as_ptr(), size, opts);
             if ret_code < 0 {
                 return Err(RadosError::new(get_error(ret_code)?));
             }
@@ -115,10 +132,10 @@ impl Rbd {
     /// Clone a parent rbd snapshot into a COW sparse child.
     pub fn clone(
         self,
-        parent_ioctx: rados_ioctx_t,
+        parent_ioctx: &IoCtx,
         parent_name: &str,
         parent_snapname: &str,
-        ioctx: rados_ioctx_t,
+        ioctx: &IoCtx,
         name: &str,
         features: Option<u64>,
         order: Option<u64>,
@@ -172,10 +189,10 @@ impl Rbd {
                 return Err(RadosError::new(get_error(ret_code)?));
             }
             let ret_code = rbd_clone3(
-                parent_ioctx,
+                *parent_ioctx.inner(),
                 parent_name.as_ptr(),
                 parent_snapname.as_ptr(),
-                ioctx,
+                *ioctx.inner(),
                 name.as_ptr(),
                 opts,
             );
@@ -194,10 +211,10 @@ impl Rbd {
     ///not return until every object that comprises the image has
     ///been deleted. Note that all snapshots must be deleted before
     ///the image can be removed.
-    pub fn remove(&self, ioctx: rados_ioctx_t, name: &str) -> RadosResult<()> {
+    pub fn remove(&self, ioctx: &IoCtx, name: &str) -> RadosResult<()> {
         let name = CString::new(name)?;
         unsafe {
-            let ret_code = rbd_remove(ioctx, name.as_ptr());
+            let ret_code = rbd_remove(*ioctx.inner(), name.as_ptr());
             if ret_code < 0 {
                 return Err(RadosError::new(get_error(ret_code)?));
             }
@@ -206,11 +223,11 @@ impl Rbd {
     }
 
     ///Rename an RBD image.
-    pub fn rename(self, ioctx: rados_ioctx_t, src: &str, dst: &str) -> RadosResult<()> {
+    pub fn rename(self, ioctx: &IoCtx, src: &str, dst: &str) -> RadosResult<()> {
         let src = CString::new(src)?;
         let dst = CString::new(dst)?;
         unsafe {
-            let ret_code = rbd_rename(ioctx, src.as_ptr(), dst.as_ptr());
+            let ret_code = rbd_rename(*ioctx.inner(), src.as_ptr(), dst.as_ptr());
             if ret_code < 0 {
                 return Err(RadosError::new(get_error(ret_code)?));
             }
@@ -218,10 +235,10 @@ impl Rbd {
         Ok(())
     }
     ///Get pool mirror mode.
-    pub fn mirror_mode_get(self, ioctx: rados_ioctx_t) -> RadosResult<rbd_mirror_mode_t> {
+    pub fn mirror_mode_get(self, ioctx: &IoCtx) -> RadosResult<rbd_mirror_mode_t> {
         let mut mode = rbd_mirror_mode_t_RBD_MIRROR_MODE_DISABLED;
         unsafe {
-            let ret_code = rbd_mirror_mode_get(ioctx, &mut mode);
+            let ret_code = rbd_mirror_mode_get(*ioctx.inner(), &mut mode);
             if ret_code < 0 {
                 return Err(RadosError::new(get_error(ret_code)?));
             }
@@ -231,13 +248,9 @@ impl Rbd {
     }
 
     ///Set pool mirror mode.
-    pub fn mirror_mode_set(
-        self,
-        ioctx: rados_ioctx_t,
-        mirror_mode: rbd_mirror_mode_t,
-    ) -> RadosResult<()> {
+    pub fn mirror_mode_set(self, ioctx: &IoCtx, mirror_mode: rbd_mirror_mode_t) -> RadosResult<()> {
         unsafe {
-            let ret_code = rbd_mirror_mode_set(ioctx, mirror_mode);
+            let ret_code = rbd_mirror_mode_set(*ioctx.inner(), mirror_mode);
             if ret_code < 0 {
                 return Err(RadosError::new(get_error(ret_code)?));
             }
@@ -248,7 +261,7 @@ impl Rbd {
     ///Add mirror peer.
     pub fn mirror_peer_add(
         self,
-        ioctx: rados_ioctx_t,
+        ioctx: &IoCtx,
         cluster_name: &str,
         client_name: &str,
     ) -> RadosResult<String> {
@@ -258,7 +271,7 @@ impl Rbd {
         let mut uuid: Vec<i8> = Vec::with_capacity(512);
         unsafe {
             let ret_code = rbd_mirror_peer_add(
-                ioctx,
+                *ioctx.inner(),
                 uuid.as_mut_ptr(),
                 uuid.capacity(),
                 cluster_name.as_ptr(),
@@ -273,10 +286,10 @@ impl Rbd {
     }
 
     ///Remove mirror peer.
-    pub fn mirror_peer_remove(self, ioctx: rados_ioctx_t, uuid: &str) -> RadosResult<()> {
+    pub fn mirror_peer_remove(self, ioctx: &IoCtx, uuid: &str) -> RadosResult<()> {
         let uuid = CString::new(uuid)?;
         unsafe {
-            let ret_code = rbd_mirror_peer_remove(ioctx, uuid.as_ptr());
+            let ret_code = rbd_mirror_peer_remove(*ioctx.inner(), uuid.as_ptr());
             if ret_code < 0 {
                 return Err(RadosError::new(get_error(ret_code)?));
             }
@@ -287,14 +300,15 @@ impl Rbd {
     /// Set mirror peer client name
     pub fn mirror_peer_set_client(
         self,
-        ioctx: rados_ioctx_t,
+        ioctx: &IoCtx,
         uuid: &str,
         client_name: &str,
     ) -> RadosResult<()> {
         let uuid = CString::new(uuid)?;
         let client_name = CString::new(client_name)?;
         unsafe {
-            let ret_code = rbd_mirror_peer_set_client(ioctx, uuid.as_ptr(), client_name.as_ptr());
+            let ret_code =
+                rbd_mirror_peer_set_client(*ioctx.inner(), uuid.as_ptr(), client_name.as_ptr());
             if ret_code < 0 {
                 return Err(RadosError::new(get_error(ret_code)?));
             }
@@ -305,14 +319,15 @@ impl Rbd {
     /// Set mirror peer cluster name
     pub fn mirror_peer_set_cluster(
         self,
-        ioctx: rados_ioctx_t,
+        ioctx: &IoCtx,
         uuid: &str,
         cluster_name: &str,
     ) -> RadosResult<()> {
         let uuid = CString::new(uuid)?;
         let cluster_name = CString::new(cluster_name)?;
         unsafe {
-            let ret_code = rbd_mirror_peer_set_cluster(ioctx, uuid.as_ptr(), cluster_name.as_ptr());
+            let ret_code =
+                rbd_mirror_peer_set_cluster(*ioctx.inner(), uuid.as_ptr(), cluster_name.as_ptr());
             if ret_code < 0 {
                 return Err(RadosError::new(get_error(ret_code)?));
             }
@@ -322,7 +337,7 @@ impl Rbd {
 
     /// Get mirror image status summary of a pool.
     /*
-    pub fn mirror_image_status_summary(self, ioctx: rados_ioctx_t) -> RadosResult<()> {
+    pub fn mirror_image_status_summary(self, ioctx: &IoCtx) -> RadosResult<()> {
         let mut states = rbd_mirror_image_status_state_t::MIRROR_IMAGE_STATUS_STATE_UNKNOWN;
         let mut counts = 0;
         let mut maxlen = 32;
@@ -390,12 +405,12 @@ impl Rbd {
     }
 
     */
-    pub fn list(&self, ioctx: rados_ioctx_t) -> RadosResult<Vec<String>> {
+    pub fn list(&self, ioctx: &IoCtx) -> RadosResult<Vec<String>> {
         let mut name_buff: Vec<i8> = Vec::with_capacity(1024);
         let mut name_size: usize = name_buff.capacity();
         loop {
             unsafe {
-                let retcode = rbd_list(ioctx, name_buff.as_mut_ptr(), &mut name_size);
+                let retcode = rbd_list(*ioctx.inner(), name_buff.as_mut_ptr(), &mut name_size);
                 if retcode == -(nix::errno::Errno::ERANGE as i32) {
                     // provided byte array is smaller than listing size
                     trace!("Resizing to {}", name_size + 1);
@@ -449,16 +464,16 @@ impl Rbd {
 
 pub fn clone(){
 unsafe{
- rbd_clone(rados_ioctx_t p_ioctx, const char *p_name,
-	                   const char *p_snapname, rados_ioctx_t c_ioctx,
+ rbd_clone(&IoCtx p_ioctx, const char *p_name,
+	                   const char *p_snapname, &IoCtx c_ioctx,
 	                   const char *c_name, uint64_t features, int *c_order);
                        }
  }                       
 
  pub fn clone2(){
                        unsafe{
- rbd_clone2(rados_ioctx_t p_ioctx, const char *p_name,
-	                    const char *p_snapname, rados_ioctx_t c_ioctx,
+ rbd_clone2(&IoCtx p_ioctx, const char *p_name,
+	                    const char *p_snapname, &IoCtx c_ioctx,
 	                    const char *c_name, uint64_t features, int *c_order,
 	                    uint64_t stripe_unit, int stripe_count);
                         }
@@ -466,21 +481,21 @@ unsafe{
 
  pub fn clone3(){
                         unsafe{
- rbd_clone3(rados_ioctx_t p_ioctx, const char *p_name,
-	                    const char *p_snapname, rados_ioctx_t c_ioctx,
+ rbd_clone3(&IoCtx p_ioctx, const char *p_name,
+	                    const char *p_snapname, &IoCtx c_ioctx,
 	                    const char *c_name, rbd_image_options_t c_opts);
                         }
  }                        
 
  pub fn remote(){
     unsafe{
-        rbd_remove(rados_ioctx_t io, const char *name);
+        rbd_remove(&IoCtx io, const char *name);
     }
  } 
  
 pub fn remove_with_progress(){
     unsafe{
-    rbd_remove_with_progress(rados_ioctx_t io, const char *name,
+    rbd_remove_with_progress(&IoCtx io, const char *name,
                                 librbd_progress_fn_t cb,
                                             void *cbdata);
                                             }
@@ -488,7 +503,7 @@ pub fn remove_with_progress(){
 
  pub fn mirror_peer_list(){
                                         unsafe{
- rbd_mirror_peer_list(rados_ioctx_t io_ctx,
+ rbd_mirror_peer_list(&IoCtx io_ctx,
                                       rbd_mirror_peer_t *peers, int *max_peers);
                                       }
  }                                      
@@ -502,7 +517,7 @@ pub fn remove_with_progress(){
 
  pub fn mirror_image_status_list(){
                                              unsafe{
- rbd_mirror_image_status_list(rados_ioctx_t io_ctx,
+ rbd_mirror_image_status_list(&IoCtx io_ctx,
 					      const char *start_id, size_t max,
 					      char **image_ids,
 					      rbd_mirror_image_status_t *images,
@@ -519,27 +534,30 @@ pub fn remove_with_progress(){
 
  pub fn mirror_image_status_summary(){
     unsafe{
- rbd_mirror_image_status_summary(rados_ioctx_t io_ctx,
+ rbd_mirror_image_status_summary(&IoCtx io_ctx,
     rbd_mirror_image_status_state_t *states, int *counts, size_t *maxlen);
     }
  }    
  */
 }
 
-impl RbdImage {
+impl<'a> RbdImage<'a> {
     /// ioctx can be acquired using the ceph-rust crate
-    pub fn open(ioctx: rados_ioctx_t, name: &str, snap_name: &str) -> RadosResult<Self> {
+    pub fn open(ioctx: &IoCtx, name: &str, snap_name: &str) -> RadosResult<Self> {
         let name = CString::new(name)?;
         let snap_name = CString::new(snap_name)?;
         let mut rbd: rbd_image_t = ptr::null_mut();
 
         unsafe {
-            let ret_code = rbd_open(ioctx, name.as_ptr(), &mut rbd, snap_name.as_ptr());
+            let ret_code = rbd_open(*ioctx.inner(), name.as_ptr(), &mut rbd, snap_name.as_ptr());
             if ret_code < 0 {
                 return Err(RadosError::new(get_error(ret_code)?));
             }
         }
-        Ok(RbdImage { image: rbd })
+        Ok(RbdImage {
+            image: rbd,
+            phantom: PhantomData,
+        })
     }
 
    /// @desc: closes an rbd image. 
@@ -559,21 +577,21 @@ impl RbdImage {
     /*
 pub fn open_by_id(){
                           unsafe{
- rbd_open_by_id(rados_ioctx_t io, const char *id,
+ rbd_open_by_id(&IoCtx io, const char *id,
                                 rbd_image_t *image, const char *snap_name);
                                 }
  }                                
 
 pub fn aio_open(){
 unsafe{
- rbd_aio_open(rados_ioctx_t io, const char *name,
+ rbd_aio_open(&IoCtx io, const char *name,
 			      rbd_image_t *image, const char *snap_name,
 			      rbd_completion_t c);
                   }
  }                  
 pub fn aio_open_by_id(){
                   unsafe{
- rbd_aio_open_by_id(rados_ioctx_t io, const char *id,
+ rbd_aio_open_by_id(&IoCtx io, const char *id,
                                     rbd_image_t *image, const char *snap_name,
                                     rbd_completion_t c);
                                     }
@@ -589,31 +607,35 @@ pub fn aio_open_by_id(){
     /// Attempting to write to a read-only image will return -EROFS.
     /// Open an image in read-only mode.
     /// ioctx can be acquired using the ceph-rust crate
-    pub fn open_read_only(ioctx: rados_ioctx_t, name: &str, snap_name: &str) -> RadosResult<Self> {
+    pub fn open_read_only(ioctx: &IoCtx, name: &str, snap_name: &str) -> RadosResult<Self> {
         let name = CString::new(name)?;
         let snap_name = CString::new(snap_name)?;
         let mut rbd: rbd_image_t = ptr::null_mut();
 
         unsafe {
-            let ret_code = rbd_open_read_only(ioctx, name.as_ptr(), &mut rbd, snap_name.as_ptr());
+            let ret_code =
+                rbd_open_read_only(*ioctx.inner(), name.as_ptr(), &mut rbd, snap_name.as_ptr());
             if ret_code < 0 {
                 return Err(RadosError::new(get_error(ret_code)?));
             }
         }
-        Ok(RbdImage { image: rbd })
+        Ok(RbdImage {
+            image: rbd,
+            phantom: PhantomData,
+        })
     }
 
     /**
 pub fn open_by_id_read_only(){
                                     unsafe{
- rbd_open_by_id_read_only(rados_ioctx_t io, const char *id,
+ rbd_open_by_id_read_only(&IoCtx io, const char *id,
                                           rbd_image_t *image, const char *snap_name);
                                           }
  }                                          
 
 pub fn aio_open_read_open(){
                                           unsafe{
- rbd_aio_open_read_only(rados_ioctx_t io, const char *name,
+ rbd_aio_open_read_only(&IoCtx io, const char *name,
 					rbd_image_t *image, const char *snap_name,
 					rbd_completion_t c);
                     }
@@ -621,7 +643,7 @@ pub fn aio_open_read_open(){
 
 pub fn aio_open_by_id_read_open(){
                     unsafe{
- rbd_aio_open_by_id_read_only(rados_ioctx_t io, const char *id,
+ rbd_aio_open_by_id_read_only(&IoCtx io, const char *id,
                                               rbd_image_t *image, const char *snap_name,
                                               rbd_completion_t c);
                                               }
@@ -828,7 +850,7 @@ pub fn resize2(){
     /// Copy the image to another location.
     pub fn copy(
         &self,
-        dest_ioctx: rados_ioctx_t,
+        dest_ioctx: &IoCtx,
         dest_name: &str,
         features: Option<u64>,
         order: Option<u64>,
@@ -880,7 +902,7 @@ pub fn resize2(){
             if ret_code < 0 {
                 return Err(RadosError::new(get_error(ret_code)?));
             }
-            let ret_code = rbd_copy3(self.image, dest_ioctx, dest_name.as_ptr(), opts);
+            let ret_code = rbd_copy3(self.image, *dest_ioctx.inner(), dest_name.as_ptr(), opts);
             if ret_code < 0 {
                 return Err(RadosError::new(get_error(ret_code)?));
             }
@@ -1354,7 +1376,7 @@ pub fn lock_get_owners_cleanup(){
 
  pub fn copy_with_progress(){
  unsafe{
- rbd_copy_with_progress(rbd_image_t image, rados_ioctx_t dest_p,
+ rbd_copy_with_progress(rbd_image_t image, &IoCtx dest_p,
                                         const char *destname,
                                         librbd_progress_fn_t cb, void *cbdata);
                                          }
@@ -1370,7 +1392,7 @@ pub fn lock_get_owners_cleanup(){
  pub fn copy_with_progress3(){
  unsafe{
  rbd_copy_with_progress3(rbd_image_t image,
-					 rados_ioctx_t dest_p,
+					 &IoCtx dest_p,
 					 const char *destname,
 					 rbd_image_options_t dest_opts,
 					 librbd_progress_fn_t cb, void *cbdata);
@@ -1380,7 +1402,7 @@ pub fn lock_get_owners_cleanup(){
  pub fn copy_with_progress4(){
  unsafe{
  rbd_copy_with_progress4(rbd_image_t image,
-					 rados_ioctx_t dest_p,
+					 &IoCtx dest_p,
 					 const char *destname,
 					 rbd_image_options_t dest_opts,
 					 librbd_progress_fn_t cb, void *cbdata,
@@ -1391,7 +1413,7 @@ pub fn lock_get_owners_cleanup(){
 /* deep copy */
 pub fn deep_copy(){
  unsafe{
- rbd_deep_copy(rbd_image_t src, rados_ioctx_t dest_io_ctx,
+ rbd_deep_copy(rbd_image_t src, &IoCtx dest_io_ctx,
                                const char *destname,
                                rbd_image_options_t dest_opts);
                                 }
@@ -1400,7 +1422,7 @@ pub fn deep_copy(){
 pub fn deep_copy_with_progress(){
  unsafe{
  rbd_deep_copy_with_progress(rbd_image_t image,
-                                             rados_ioctx_t dest_io_ctx,
+                                             &IoCtx dest_io_ctx,
                                              const char *destname,
                                              rbd_image_options_t dest_opts,
                                              librbd_progress_fn_t cb,

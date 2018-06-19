@@ -14,7 +14,7 @@ version = "0.2.2"
 bindgen = "0.36.0"
 
 [dependencies]
-ceph = "~0.5"
+ceph = "~1.0"
 libc = "~0.2"
 log = "~0.4"
 nix = "~0.10"
