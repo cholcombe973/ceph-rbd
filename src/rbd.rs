@@ -15,7 +15,6 @@ use std::ffi::CString;
 use std::io::{BufRead, Cursor};
 use std::marker::PhantomData;
 use std::mem::size_of;
-use std::ops::Drop;
 use std::os::raw::{c_char, c_void};
 use std::ptr;
 
@@ -30,7 +29,6 @@ pub struct RbdImage<'a> {
 impl<'a> Drop for RbdImage<'a> {
     fn drop(&mut self) {
         if !self.image.is_null() {
-            println!("destroy rbd image");
             unsafe {
                 let retcode = rbd_close(self.image);
                 if retcode < 0 {
@@ -560,6 +558,20 @@ impl<'a> RbdImage<'a> {
             image: rbd,
             phantom: PhantomData,
         })
+    }
+
+   /// @desc: closes an rbd image. 
+   /// Should be called on an RBDImage after a successful open
+    pub fn close_image(&self) -> RadosResult<()> {
+        if !self.image.is_null() {
+            unsafe {
+                let retcode = rbd_close(self.image);
+                if retcode != 0 {
+                    error!("RbdImage close failed with code {}", retcode);
+                }
+            }
+        }
+        Ok(())
     }
 
     /*
