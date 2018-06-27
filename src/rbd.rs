@@ -54,7 +54,7 @@ pub struct RbdImageInfo {
     pub parent_pool: i64,
     pub parent_name: Option<String>,
 }
- 
+
 impl Rbd {
     /// Create an rbd image
     /// name: what the image is called
@@ -406,29 +406,37 @@ impl Rbd {
 
     */
     pub fn list(&self, ioctx: &IoCtx) -> RadosResult<Vec<String>> {
-        let mut name_buff: Vec<i8> = Vec::with_capacity(1024);
+        let mut name_buff: Vec<i8> = Vec::with_capacity(0);
         let mut name_size: usize = name_buff.capacity();
-        loop {
-            unsafe {
-                let retcode = rbd_list(*ioctx.inner(), name_buff.as_mut_ptr(), &mut name_size);
-                if retcode == -(nix::errno::Errno::ERANGE as i32) {
-                    // provided byte array is smaller than listing size
-                    trace!("Resizing to {}", name_size + 1);
-                    name_buff = Vec::with_capacity(name_size + 1);
-                    continue;
-                }
+        // This code below follows the rbd_fuse.cc example in ceph's main repository.
+        // If this code is incorrect then so is ceph's.
+        // https://github.com/ceph/ceph/blob/jewel/src/rbd_fuse/rbd-fuse.cc#L111
+        // This would've been a lot easier to write if ceph had documented how this rbd_list
+        // function worked in their header file.
+        unsafe {
+            let retcode = rbd_list(*ioctx.inner(), name_buff.as_mut_ptr(), &mut name_size);
+            // If this is returned that means our buffer was too small
+            if retcode == -(nix::errno::Errno::ERANGE as i32) {
+                // provided byte array is smaller than listing size
+                trace!("Resizing to {}", name_size + 1);
+                name_buff = Vec::with_capacity(name_size + 1);
+            } else if retcode < 0 {
+                // This is an actual error
+                return Err(RadosError::new(get_error(retcode)?));
+            }
 
-                if retcode >= 0 {
-                    // Set the buffer length to the size that ceph wrote to it
-                    trace!(
-                        "retcode: {}. Capacity: {}.  Setting len: {}",
-                        retcode,
-                        name_buff.capacity(),
-                        name_size,
-                    );
-                    name_buff.set_len(name_size);
-                    break;
-                }
+            let retcode = rbd_list(*ioctx.inner(), name_buff.as_mut_ptr(), &mut name_size);
+
+            // And >=0 is how many bytes were written to the list
+            if retcode >= 0 {
+                // Set the buffer length to the size that ceph wrote to it
+                trace!(
+                    "retcode: {}. Capacity: {}.  Setting len: {}",
+                    retcode,
+                    name_buff.capacity(),
+                    name_size,
+                );
+                name_buff.set_len(retcode as usize);
             }
         }
 
@@ -560,8 +568,8 @@ impl<'a> RbdImage<'a> {
         })
     }
 
-   /// @desc: closes an rbd image. 
-   /// Should be called on an RBDImage after a successful open
+    /// @desc: closes an rbd image.
+    /// Should be called on an RBDImage after a successful open
     pub fn close_image(&self) -> RadosResult<()> {
         if !self.image.is_null() {
             unsafe {
@@ -696,13 +704,15 @@ pub fn resize2(){
                 return Err(RadosError::new(get_error(ret_code)?));
             }
         }
-        let name_prefix_vec: Vec<u8> = info.block_name_prefix
+        let name_prefix_vec: Vec<u8> = info
+            .block_name_prefix
             .into_iter()
             .map(|c| c.clone() as u8)
             .filter(|c| c > &0)
             .collect();
         let name_prefix = String::from_utf8(name_prefix_vec)?;
-        let parent_name_vec: Vec<u8> = info.parent_name
+        let parent_name_vec: Vec<u8> = info
+            .parent_name
             .into_iter()
             .map(|c| c.clone() as u8)
             .filter(|c| c > &0)
