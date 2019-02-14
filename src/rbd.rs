@@ -414,7 +414,9 @@ impl Rbd {
         // This would've been a lot easier to write if ceph had documented how this rbd_list
         // function worked in their header file.
         unsafe {
+            trace!("running initial list with size: {}", name_size);
             let retcode = rbd_list(*ioctx.inner(), name_buff.as_mut_ptr(), &mut name_size);
+            trace!("rbd_list retcode: {}", retcode);
             // If this is returned that means our buffer was too small
             if retcode == -(nix::errno::Errno::ERANGE as i32) {
                 // provided byte array is smaller than listing size
