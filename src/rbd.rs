@@ -708,14 +708,14 @@ pub fn resize2(){
         }
         let name_prefix_vec: Vec<u8> = info
             .block_name_prefix
-            .into_iter()
+            .iter()
             .map(|c| c.clone() as u8)
             .filter(|c| c > &0)
             .collect();
         let name_prefix = String::from_utf8(name_prefix_vec)?;
         let parent_name_vec: Vec<u8> = info
             .parent_name
-            .into_iter()
+            .iter()
             .map(|c| c.clone() as u8)
             .filter(|c| c > &0)
             .collect();
