@@ -471,6 +471,7 @@ impl Rbd {
     }
 
     pub fn ceph_rbd_list(&self, ioctx: &IoCtx) -> RadosResult<Vec<String>> {
+        trace!("Starting RBC list\n");
         let mut names: Vec<i8> = Vec::with_capacity(0);
         let mut name_size: usize = 0;
         unsafe {
@@ -478,6 +479,20 @@ impl Rbd {
             trace!("Resizing to {}", name_size + 1);
             names = Vec::with_capacity(name_size + 1);
             debug!("New Vector {:?}\n", names);
+
+            let retcode = rbd_list(*ioctx.inner(), names.as_mut_ptr(), &mut name_size);
+
+            // And >=0 is how many bytes were written to the list
+            if retcode >= 0 {
+                // Set the buffer length to the size that ceph wrote to it
+                trace!(
+                    "retcode: {}. Capacity: {}.  Setting len: {}",
+                    retcode,
+                    names.capacity(),
+                    name_size,
+                );
+                names.set_len(retcode as usize);
+            }
         }
         /*
          * returned byte array contains image names separated by '\0'.
