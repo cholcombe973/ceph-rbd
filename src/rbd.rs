@@ -475,6 +475,7 @@ impl Rbd {
         let mut names: Vec<i8> = Vec::with_capacity(0);
         let mut name_size: usize = 0;
         unsafe {
+            trace!("Running RBD_LIST");
             let retcode = rbd_list(*ioctx.inner(), names.as_mut_ptr(), &mut name_size);
             trace!("Resizing to {}", name_size + 1);
             names = Vec::with_capacity(name_size + 1);
