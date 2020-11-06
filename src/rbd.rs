@@ -470,6 +470,44 @@ impl Rbd {
         return Ok(name_list);
     }
 
+    pub fn ceph_rbd_list(&self, ioctx: &IoCtx) -> RadosResult<Vec<String>> {
+        let mut names: Vec<i8> = Vec::with_capacity(0);
+        let mut name_size: usize = 0;
+        unsafe {
+            let retcode = rbd_list(*ioctx.inner(), names.as_mut_ptr(), &mut name_size);
+            trace!("Resizing to {}", name_size + 1);
+            names = Vec::with_capacity(name_size + 1);
+            debug!("New Vector {:?}\n", names);
+        }
+        /*
+         * returned byte array contains image names separated by '\0'.
+         * the value of rc points to actual size used in the array.
+         */
+        let mut name_list: Vec<String> = Vec::new();
+        let new_buff: Vec<u8> = names.iter().map(|c| c.clone() as u8).collect();
+        debug!("Buffer: {:?}\n", new_buff);
+        let mut cursor = Cursor::new(&new_buff);
+        loop {
+            let mut string_buf: Vec<u8> = Vec::new();
+            let read = cursor.read_until(0x00, &mut string_buf)?;
+            debug!("read string {:?}\n", read);
+            if read == 0 {
+                // End of name_buff;
+                break;
+            } else {
+                // Read a String
+                // name_list.push(String::from_utf8_lossy(&string_buf[..read - 1]).into_owned());
+                // Remove the trailing \0
+                string_buf.pop();
+                let s = String::from_utf8(string_buf)?;
+                if !s.is_empty() {
+                    name_list.push(s);
+                }
+            }
+        }
+
+        return Ok(name_list);
+    }
     /*
 
 pub fn clone(){
