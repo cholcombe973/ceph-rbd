@@ -6,7 +6,6 @@ extern crate nix;
 
 use self::ceph::ceph::IoCtx;
 use self::ceph::error::{RadosError, RadosResult};
-use self::ceph::rados::Struct_rados_pool_stat_t;
 
 use ffi::*;
 use get_error;
