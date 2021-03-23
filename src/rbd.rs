@@ -6,6 +6,7 @@ extern crate nix;
 
 use self::ceph::ceph::IoCtx;
 use self::ceph::error::{RadosError, RadosResult};
+use self::ceph::rados::Struct_rados_pool_stat_t;
 
 use ffi::*;
 use get_error;
@@ -523,6 +524,21 @@ impl Rbd {
         }
 
         return Ok(name_list);
+    }
+
+    pub fn ceph_rbd_pool_stat(&self, ioctx: &IoCtx) -> RadosResult<rados_pool_stat_t> {
+        
+        unsafe{ 
+            let mut pool_stat = ::std::mem::zeroed();
+            trace!("running rbd_pool_stat_get");
+            let ret_code = rados_ioctx_pool_stat(*ioctx.inner(), &mut pool_stat);
+            if ret_code < 0 {
+                return Err(RadosError::new(get_error(ret_code)?));
+            }
+            println!("{:?}", pool_stat);
+
+            Ok(pool_stat)
+        }
     }
     /*
 
