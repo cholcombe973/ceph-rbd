@@ -470,6 +470,19 @@ impl Rbd {
         return Ok(name_list);
     }
 
+    /// run rbd stat -p {pool} on a given pool IoCtx
+    pub fn ceph_rbd_pool_stat(&self, ioctx: &IoCtx) -> RadosResult<rados_pool_stat_t> {    
+        unsafe{ 
+            let mut pool_stat = ::std::mem::zeroed();
+            trace!("running rbd_pool_stat_get");
+            let ret_code = rados_ioctx_pool_stat(*ioctx.inner(), &mut pool_stat);
+            if ret_code < 0 {
+                return Err(RadosError::new(get_error(ret_code)?));
+            }
+
+            Ok(pool_stat)
+        }
+    }
     /*
 
 pub fn clone(){
